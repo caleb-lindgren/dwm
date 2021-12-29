@@ -5,8 +5,8 @@ static const unsigned int borderpx  = 1;        /* border pixel of windows */
 static const unsigned int snap      = 32;       /* snap pixel */
 static const int showbar            = 1;        /* 0 means no bar */
 static const int topbar             = 1;        /* 0 means bottom bar */
-static const char *fonts[]          = { "monospace:size=10" };
-static const char dmenufont[]       = "monospace:size=10";
+static const char *fonts[]          = { "Liberation Mono:pixelsize=12:antialias=true:autohint=true" };
+static const char dmenufont[]       = "Liberation Mono:pixelsize=12:antialias=true:autohint=true";
 static const char col_gray1[]       = "#222222";
 static const char col_gray2[]       = "#444444";
 static const char col_gray3[]       = "#bbbbbb";
@@ -33,7 +33,7 @@ static const Rule rules[] = {
 /* layout(s) */
 static const float mfact     = 0.55; /* factor of master area size [0.05..0.95] */
 static const int nmaster     = 1;    /* number of clients in master area */
-static const int resizehints = 1;    /* 1 means respect size hints in tiled resizals */
+static const int resizehints = 0;    /* 1 means respect size hints in tiled resizals */
 static const int lockfullscreen = 1; /* 1 will force focus on the fullscreen window */
 
 static const Layout layouts[] = {
@@ -54,6 +54,47 @@ static const Layout layouts[] = {
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
 
+/** Function to shift the current view to the left/right
+ *
+ * @param: "arg->i" stores the number of tags to shift right (positive value)
+ *          or left (negative value)
+ */
+void shiftview(const Arg *arg) {
+    Arg shifted;
+
+    if(arg->i > 0) // left circular shift
+        shifted.ui = (selmon->tagset[selmon->seltags] << arg->i)
+           | (selmon->tagset[selmon->seltags] >> (LENGTH(tags) - arg->i));
+
+    else // right circular shift
+        shifted.ui = selmon->tagset[selmon->seltags] >> (- arg->i)
+           | selmon->tagset[selmon->seltags] << (LENGTH(tags) + arg->i);
+
+    view(&shifted);
+}
+
+/* Shift focused window one tag to the right */
+void tagtoright(const Arg *arg) {
+    if(selmon->sel != NULL
+    && __builtin_popcount(selmon->tagset[selmon->seltags] & TAGMASK) == 1
+    && selmon->tagset[selmon->seltags] & (TAGMASK >> 1)) {
+        selmon->sel->tags <<= 1;
+        focus(NULL);
+        arrange(selmon);
+    }
+}
+
+/* Shift focused window one tag to the left */
+void tagtoleft(const Arg *arg) {
+    if(selmon->sel != NULL
+    && __builtin_popcount(selmon->tagset[selmon->seltags] & TAGMASK) == 1
+    && selmon->tagset[selmon->seltags] > 1) {
+        selmon->sel->tags >>= 1;
+        focus(NULL);
+        arrange(selmon);
+    }
+}
+
 /* commands */
 static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
 static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL };
@@ -61,6 +102,14 @@ static const char *termcmd[]  = { "st", NULL };
 
 static Key keys[] = {
 	/* modifier                     key        function        argument */
+
+	/* Added */
+	{ MODKEY,                       XK_o,      shiftview,      {.i = +1 } },
+	{ MODKEY,                       XK_n,      shiftview,      {.i = -1 } },
+	{ MODKEY|ShiftMask,             XK_o,      tagtoright,     {0} },
+	{ MODKEY|ShiftMask,             XK_n,      tagtoleft,      {0} },
+
+	/* Defaults */
 	{ MODKEY,                       XK_p,      spawn,          {.v = dmenucmd } },
 	{ MODKEY|ShiftMask,             XK_Return, spawn,          {.v = termcmd } },
 	{ MODKEY,                       XK_b,      togglebar,      {0} },
