@@ -106,8 +106,8 @@ index e5efb6a..0d18e1b 100644
 +static void showall(const Arg *arg);
 +static void showwin(Client *c);
  static void showhide(Client *c);
- static void sigchld(int unused);
  static void spawn(const Arg *arg);
+ static void tag(const Arg *arg);
 @@ -214,6 +225,7 @@ static void togglebar(const Arg *arg);
  static void togglefloating(const Arg *arg);
  static void toggletag(const Arg *arg);
