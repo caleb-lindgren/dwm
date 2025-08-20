@@ -97,6 +97,33 @@ void tagtoleft(const Arg *arg) {
     }
 }
 
+/* same as sendmon but don't change tags */
+void sendmonwithtags(Client *c, Monitor *m)
+{
+	if (c->mon == m)
+		return;
+	unfocus(c, 1);
+	detach(c);
+	detachstack(c);
+	c->mon = m;
+	/* no change to tags */
+	attach(c);
+	attachstack(c);
+	focus(NULL);
+	arrange(NULL);
+}
+
+/* move all clients from one monitor to another, preserving tags */
+void switchall(const Arg *arg) {
+	if (!selmon->clients || !mons->next)
+		return;
+	Client *c, *next;
+	for (c = selmon->clients; c; c = next) {
+		next = c->next;
+		sendmonwithtags(c, dirtomon(arg->i));
+	}
+}
+
 /* commands */
 static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
 static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL };
@@ -112,6 +139,8 @@ static const Key keys[] = {
 	{ MODKEY|ShiftMask,             XK_o,      tagtoright,     {0} },
 	{ MODKEY|ShiftMask,             XK_n,      tagtoleft,      {0} },
 	{ MODKEY,                       XK_g,      spawn,          {.v = dwmgx } }, 
+	{ MODKEY|ShiftMask,             XK_bracketleft,  switchall, {.i = -1 } },
+	{ MODKEY|ShiftMask,             XK_bracketright, switchall, {.i = +1 } },
 
 	/* Defaults */
 	{ MODKEY,                       XK_p,      spawn,          {.v = dmenucmd } },
@@ -171,4 +200,3 @@ static const Button buttons[] = {
 	{ ClkTagBar,            MODKEY,         Button1,        tag,            {0} },
 	{ ClkTagBar,            MODKEY,         Button3,        toggletag,      {0} },
 };
-
