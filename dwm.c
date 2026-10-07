@@ -492,12 +492,11 @@ void
 attachtop(Client *c)
 {
 	int n;
-	Monitor *m = selmon;
 	Client *below;
 
 	for (n = 1, below = c->mon->clients;
 		below && below->next && (below->isfloating
-		|| !ISVISIBLEONTAG(below, c->tags) || n != m->nmaster);
+		|| !ISVISIBLEONTAG(below, c->tags) || n != c->mon->nmaster);
 		n = below->isfloating || !ISVISIBLEONTAG(below, c->tags)
 		? n + 0 : n + 1, below = below->next);
 	c->next = NULL;
