@@ -49,9 +49,10 @@ static const Layout layouts[] = {
 #define MODKEY Mod1Mask
 #define TAGKEYS(KEY,TAG) \
 	{ MODKEY,                       KEY,      view,           {.ui = 1 << TAG} }, \
-	{ MODKEY|ControlMask,           KEY,      toggleview,     {.ui = 1 << TAG} }, \
+	{ MODKEY|ControlMask,           KEY,      tag,            {.ui = 1 << TAG} }, \
 	{ MODKEY|ShiftMask,             KEY,      tag,            {.ui = 1 << TAG} }, \
 	{ MODKEY|ControlMask|ShiftMask, KEY,      toggletag,      {.ui = 1 << TAG} },
+	//{ MODKEY|ShiftMask,             KEY,      toggleview,     {.ui = 1 << TAG} },
 
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
@@ -135,40 +136,50 @@ static const Key keys[] = {
 
 	/* Added */
 	{ MODKEY,                       XK_o,      shiftview,      {.i = +1 } },
+	{ MODKEY,                       XK_u,      shiftview,      {.i = -1 } },
 	{ MODKEY,                       XK_n,      shiftview,      {.i = -1 } },
+	{ MODKEY|ControlMask,           XK_o,      tagtoright,     {0} },
+	{ MODKEY|ControlMask,           XK_u,      tagtoleft,      {0} },
+	{ MODKEY|ControlMask,           XK_n,      tagtoleft,      {0} },
 	{ MODKEY|ShiftMask,             XK_o,      tagtoright,     {0} },
+	{ MODKEY|ShiftMask,             XK_u,      tagtoleft,      {0} },
 	{ MODKEY|ShiftMask,             XK_n,      tagtoleft,      {0} },
 	{ MODKEY,                       XK_g,      spawn,          {.v = dwmgx } }, 
-	{ MODKEY|ShiftMask,             XK_bracketleft,  switchall, {.i = -1 } },
-	{ MODKEY|ShiftMask,             XK_bracketright, switchall, {.i = +1 } },
+	{ MODKEY,                       XK_bracketleft,  switchall, {.i = -1 } },
+	{ MODKEY,                       XK_bracketright, switchall, {.i = +1 } },
 
 	/* Defaults */
 	{ MODKEY,                       XK_p,      spawn,          {.v = dmenucmd } },
 	{ MODKEY|ShiftMask,             XK_Return, spawn,          {.v = termcmd } },
+	{ MODKEY|ControlMask,           XK_Return, spawn,          {.v = termcmd } },
 	{ MODKEY,                       XK_b,      togglebar,      {0} },
 	{ MODKEY,                       XK_j,      focusstackvis,  {.i = +1 } },
 	{ MODKEY,                       XK_k,      focusstackvis,  {.i = -1 } },
-	{ MODKEY|ShiftMask,             XK_j,      focusstackhid,  {.i = +1 } },
-	{ MODKEY|ShiftMask,             XK_k,      focusstackhid,  {.i = -1 } },
+	{ MODKEY|ControlMask,           XK_j,      focusstackhid,  {.i = +1 } },
+	{ MODKEY|ControlMask,           XK_k,      focusstackhid,  {.i = -1 } },
 	{ MODKEY,                       XK_i,      incnmaster,     {.i = +1 } },
 	{ MODKEY,                       XK_d,      incnmaster,     {.i = -1 } },
 	{ MODKEY,                       XK_h,      setmfact,       {.f = -0.05} },
 	{ MODKEY,                       XK_l,      setmfact,       {.f = +0.05} },
 	{ MODKEY,                       XK_Return, zoom,           {0} },
 	{ MODKEY,                       XK_Tab,    view,           {0} },
+	{ MODKEY|ControlMask,           XK_c,      killclient,     {0} },
 	{ MODKEY|ShiftMask,             XK_c,      killclient,     {0} },
 	{ MODKEY,                       XK_t,      setlayout,      {.v = &layouts[0]} },
 	{ MODKEY,                       XK_f,      setlayout,      {.v = &layouts[1]} },
 	{ MODKEY,                       XK_m,      setlayout,      {.v = &layouts[2]} },
 	{ MODKEY,                       XK_space,  setlayout,      {0} },
-	{ MODKEY|ShiftMask,             XK_space,  togglefloating, {0} },
+	{ MODKEY|ControlMask,           XK_space,  togglefloating, {0} },
 	{ MODKEY,                       XK_0,      view,           {.ui = ~0 } },
-	{ MODKEY|ShiftMask,             XK_0,      tag,            {.ui = ~0 } },
+	{ MODKEY|ControlMask,           XK_0,      tag,            {.ui = ~0 } },
 	{ MODKEY,                       XK_comma,  focusmon,       {.i = -1 } },
 	{ MODKEY,                       XK_period, focusmon,       {.i = +1 } },
 	{ MODKEY|ShiftMask,             XK_comma,  tagmon,         {.i = -1 } },
 	{ MODKEY|ShiftMask,             XK_period, tagmon,         {.i = +1 } },
+	{ MODKEY|ControlMask,           XK_comma,  tagmon,         {.i = -1 } },
+	{ MODKEY|ControlMask,           XK_period, tagmon,         {.i = +1 } },
 	{ MODKEY,                       XK_s,      show,           {0} },
+	{ MODKEY|ControlMask,           XK_s,      showall,        {0} },
 	{ MODKEY|ShiftMask,             XK_s,      showall,        {0} },
 	{ MODKEY,                       XK_c,      hide,           {0} },
 	TAGKEYS(                        XK_1,                      0)
@@ -180,6 +191,7 @@ static const Key keys[] = {
 	TAGKEYS(                        XK_7,                      6)
 	TAGKEYS(                        XK_8,                      7)
 	TAGKEYS(                        XK_9,                      8)
+	{ MODKEY|ControlMask,           XK_q,      quit,           {0} },
 	{ MODKEY|ShiftMask,             XK_q,      quit,           {0} },
 };
 
