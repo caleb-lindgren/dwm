@@ -5,37 +5,39 @@ Subject: [PATCH] attachdirection updated. Added attachtop option(5) that
  attaches the newest client below the last master/on top of the stack.
 
 ---
- config.def.h |   1 +
- dwm.c        | 146 +++++++++++++++++++++++++++++++++++++++++++++++++--
- 2 files changed, 143 insertions(+), 4 deletions(-)
+ config.def.h |   2 +
+ dwm.c        | 152 +++++++++++++++++++++++++++++++++++++++++++++++++--
+ 2 files changed, 150 insertions(+), 4 deletions(-)
 
 diff --git a/config.def.h b/config.def.h
-index 1c0b587..d7c089b 100644
+index 6497687..f96f6ac 100644
 --- a/config.def.h
 +++ b/config.def.h
-@@ -35,6 +35,7 @@ static const Rule rules[] = {
- static const float mfact     = 0.55; /* factor of master area size [0.05..0.95] */
- static const int nmaster     = 1;    /* number of clients in master area */
+@@ -38,6 +38,8 @@ static const int nmaster     = 1;    /* number of clients in master area */
  static const int resizehints = 1;    /* 1 means respect size hints in tiled resizals */
-+static const int attachdirection = 0;    /* 0 default, 1 above, 2 aside, 3 below, 4 bottom, 5 top */
+ static const int lockfullscreen = 1; /* 1 will force focus on the fullscreen window */
+ static const int refreshrate = 120;  /* refresh rate (per second) for client move/resize */
++static const int attachdirection = 0; /* 0 default, 1 above, 2 aside,
++                                         3 below, 4 bottom, 5 top */
  
  static const Layout layouts[] = {
  	/* symbol     arrange function */
 diff --git a/dwm.c b/dwm.c
-index 9fd0286..2c1b143 100644
+index 60f9952..77429b4 100644
 --- a/dwm.c
 +++ b/dwm.c
-@@ -49,7 +49,8 @@
+@@ -49,7 +49,9 @@
  #define CLEANMASK(mask)         (mask & ~(numlockmask|LockMask) & (ShiftMask|ControlMask|Mod1Mask|Mod2Mask|Mod3Mask|Mod4Mask|Mod5Mask))
  #define INTERSECT(x,y,w,h,m)    (MAX(0, MIN((x)+(w),(m)->wx+(m)->ww) - MAX((x),(m)->wx)) \
                                 * MAX(0, MIN((y)+(h),(m)->wy+(m)->wh) - MAX((y),(m)->wy)))
 -#define ISVISIBLE(C)            ((C->tags & C->mon->tagset[C->mon->seltags]))
 +#define ISVISIBLEONTAG(C, T)    ((C->tags & T))
-+#define ISVISIBLE(C)            ISVISIBLEONTAG(C, C->mon->tagset[C->mon->seltags])
- #define LENGTH(X)               (sizeof X / sizeof X[0])
++#define ISVISIBLE(C)            \
++                        ISVISIBLEONTAG(C, C->mon->tagset[C->mon->seltags])
+ #define HIDDEN(C)               ((getstate(C->win) == IconicState))
  #define MOUSEMASK               (BUTTONMASK|PointerMotionMask)
  #define WIDTH(X)                ((X)->w + 2 * (X)->bw)
-@@ -147,6 +148,11 @@ static int applysizehints(Client *c, int *x, int *y, int *w, int *h, int interac
+@@ -152,6 +154,11 @@ static int applysizehints(Client *c, int *x, int *y, int *w, int *h, int interac
  static void arrange(Monitor *m);
  static void arrangemon(Monitor *m);
  static void attach(Client *c);
@@ -47,22 +49,23 @@ index 9fd0286..2c1b143 100644
  static void attachstack(Client *c);
  static void buttonpress(XEvent *e);
  static void checkotherwm(void);
-@@ -184,6 +190,7 @@ static void maprequest(XEvent *e);
+@@ -193,6 +200,7 @@ static void maprequest(XEvent *e);
  static void monocle(Monitor *m);
  static void motionnotify(XEvent *e);
  static void movemouse(const Arg *arg);
 +static Client *nexttagged(Client *c);
  static Client *nexttiled(Client *c);
- static void pop(Client *);
+ static void pop(Client *c);
  static void propertynotify(XEvent *e);
-@@ -407,6 +414,73 @@ attach(Client *c)
+@@ -430,6 +438,77 @@ attach(Client *c)
  	c->mon->clients = c;
  }
  
 +void
 +attachabove(Client *c)
 +{
-+	if (c->mon->sel == NULL || c->mon->sel == c->mon->clients || c->mon->sel->isfloating) {
++	if (c->mon->sel == NULL || c->mon->sel == c->mon->clients
++	|| c->mon->sel->isfloating) {
 +		attach(c);
 +		return;
 +	}
@@ -87,14 +90,15 @@ index 9fd0286..2c1b143 100644
 +void
 +attachbelow(Client *c)
 +{
-+	if(c->mon->sel == NULL || c->mon->sel == c || c->mon->sel->isfloating) {
++	if(c->mon->sel == NULL || c->mon->sel == c
++	|| c->mon->sel->isfloating) {
 +		attach(c);
 +		return;
 +	}
 +	c->next = c->mon->sel->next;
 +	c->mon->sel->next = c;
 +}
-+ 
++
 +void
 +attachbottom(Client *c)
 +{
@@ -115,8 +119,10 @@ index 9fd0286..2c1b143 100644
 +	Client *below;
 +
 +	for (n = 1, below = c->mon->clients;
-+		below && below->next && (below->isfloating || !ISVISIBLEONTAG(below, c->tags) || n != m->nmaster);
-+		n = below->isfloating || !ISVISIBLEONTAG(below, c->tags) ? n + 0 : n + 1, below = below->next);
++		below && below->next && (below->isfloating
++		|| !ISVISIBLEONTAG(below, c->tags) || n != m->nmaster);
++		n = below->isfloating || !ISVISIBLEONTAG(below, c->tags)
++		? n + 0 : n + 1, below = below->next);
 +	c->next = NULL;
 +	if (below) {
 +		c->next = below->next;
@@ -129,7 +135,7 @@ index 9fd0286..2c1b143 100644
  void
  attachstack(Client *c)
  {
-@@ -1063,7 +1137,25 @@ manage(Window w, XWindowAttributes *wa)
+@@ -1210,7 +1289,25 @@ manage(Window w, XWindowAttributes *wa)
  		c->isfloating = c->oldstate = trans != None || c->isfixed;
  	if (c->isfloating)
  		XRaiseWindow(dpy, c->win);
@@ -156,7 +162,7 @@ index 9fd0286..2c1b143 100644
  	attachstack(c);
  	XChangeProperty(dpy, root, netatom[NetClientList], XA_WINDOW, 32, PropModeAppend,
  		(unsigned char *) &(c->win), 1);
-@@ -1193,6 +1285,16 @@ movemouse(const Arg *arg)
+@@ -1340,6 +1437,17 @@ movemouse(const Arg *arg)
  	}
  }
  
@@ -164,7 +170,8 @@ index 9fd0286..2c1b143 100644
 +nexttagged(Client *c) {
 +	Client *walked = c->mon->clients;
 +	for(;
-+		walked && (walked->isfloating || !ISVISIBLEONTAG(walked, c->tags));
++		walked && (walked->isfloating
++		|| !ISVISIBLEONTAG(walked, c->tags));
 +		walked = walked->next
 +	);
 +	return walked;
@@ -173,7 +180,7 @@ index 9fd0286..2c1b143 100644
  Client *
  nexttiled(Client *c)
  {
-@@ -1418,7 +1520,25 @@ sendmon(Client *c, Monitor *m)
+@@ -1575,7 +1683,25 @@ sendmon(Client *c, Monitor *m)
  	detachstack(c);
  	c->mon = m;
  	c->tags = m->tagset[m->seltags]; /* assign tags of target monitor */
@@ -200,33 +207,33 @@ index 9fd0286..2c1b143 100644
  	attachstack(c);
  	focus(NULL);
  	arrange(NULL);
-@@ -1900,7 +2020,25 @@ updategeom(void)
- 					m->clients = c->next;
- 					detachstack(c);
- 					c->mon = mons;
--					attach(c);
-+					switch(attachdirection){
-+					case 1:
-+						attachabove(c);
-+						break;
-+					case 2:
-+						attachaside(c);
-+						break;
-+					case 3:
-+						attachbelow(c);
-+						break;
-+					case 4:
-+						attachbottom(c);
-+						break;
-+					case 5:
-+						attachtop(c);
-+						break;
-+					default:
-+						attach(c);
-+					}
- 					attachstack(c);
- 				}
- 				if (m == selmon)
+@@ -2140,7 +2266,25 @@ updategeom(void)
+ 				m->clients = c->next;
+ 				detachstack(c);
+ 				c->mon = mons;
+-				attach(c);
++				switch(attachdirection){
++				case 1:
++					attachabove(c);
++					break;
++				case 2:
++					attachaside(c);
++					break;
++				case 3:
++					attachbelow(c);
++					break;
++				case 4:
++					attachbottom(c);
++					break;
++				case 5:
++					attachtop(c);
++					break;
++				default:
++					attach(c);
++				}
+ 				attachstack(c);
+ 			}
+ 			if (m == selmon)
 -- 
 2.26.2
 
