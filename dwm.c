@@ -203,10 +203,8 @@ static void movemouse(const Arg *arg);
 static Client *nexttagged(Client *c);
 static Client *nexttiled(Client *c);
 static void pop(Client *c);
-static Client *prevtiled(Client *c);
 static void propertynotify(XEvent *e);
-static void pushdown(const Arg *arg);
-static void pushup(const Arg *arg);
+static void pushring(const Arg *arg);
 static void quit(const Arg *arg);
 static Monitor *recttomon(int x, int y, int w, int h);
 static void resize(Client *c, int x, int y, int w, int h, int interact);
@@ -1467,16 +1465,6 @@ pop(Client *c)
 	arrange(c->mon);
 }
 
-Client *
-prevtiled(Client *c) {
-	Client *p, *r;
-
-	for(p = selmon->clients, r = NULL; p && p != c; p = p->next)
-		if(!p->isfloating && ISVISIBLE(p) && !HIDDEN(p))
-			r = p;
-	return r;
-}
-
 void
 propertynotify(XEvent *e)
 {
@@ -1515,49 +1503,43 @@ propertynotify(XEvent *e)
 }
 
 void
-pushdown(const Arg *arg) {
-	Client *sel = selmon->sel, *c;
+pushring(const Arg *arg)
+{
+	/* Move the selected client one step around the tiled layout:
+	 * clockwise (arg->i > 0) runs down the stack, up the master
+	 * column, and back to the top of the stack. At a corner it is
+	 * reinserted there and the clients between shift by one. */
+	Client *sel = selmon->sel, *c, **tc;
+	int i, n, k, t;
 
-	if(!sel || sel->isfloating)
+	if (!sel)
 		return;
-	if((c = nexttiled(sel->next))) {
-		detach(sel);
-		sel->next = c->next;
-		c->next = sel;
-	} else {
-		detach(sel);
-		attach(sel);
-	}
-	focus(sel);
-	arrange(selmon);
-}
-
-void
-pushup(const Arg *arg) {
-	Client *sel = selmon->sel, *c;
-
-	if(!sel || sel->isfloating)
+	for (i = -1, n = 0, c = nexttiled(selmon->clients); c;
+	    c = nexttiled(c->next), n++)
+		if (c == sel)
+			i = n;
+	if (i < 0 || n < 2)
 		return;
-	if((c = prevtiled(sel))) {
-		detach(sel);
-		sel->next = c;
-		if(selmon->clients == c)
-			selmon->clients = sel;
-		else {
-			for(c = selmon->clients; c->next != sel->next;
-			    c = c->next);
-			c->next = sel;
-		}
+	k = MIN(selmon->nmaster, n);
+	if (arg->i > 0) {
+		if (i >= k)
+			t = i == n - 1 ? MAX(k - 1, 0) : i + 1;
+		else
+			t = i == 0 ? MIN(k, n - 1) : i - 1;
 	} else {
-		/* sel is the only tiled client and already last; moving it
-		 * would link it to itself and drop it from the list */
-		if(!sel->next)
-			return;
-		for(c = sel; c->next; c = c->next);
-		detach(sel);
-		sel->next = NULL;
-		c->next = sel;
+		if (i >= k)
+			t = i == k ? (k > 0 ? 0 : n - 1) : i - 1;
+		else
+			t = i == k - 1 ? (k < n ? n - 1 : 0) : i + 1;
 	}
+	/* reinsert sel before the t-th remaining tiled client, or at the
+	 * end of the list when t is past the last one */
+	detach(sel);
+	for (n = 0, tc = &selmon->clients; *tc; tc = &(*tc)->next)
+		if (nexttiled(*tc) == *tc && n++ == t)
+			break;
+	sel->next = *tc;
+	*tc = sel;
 	focus(sel);
 	arrange(selmon);
 }
