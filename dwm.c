@@ -1507,9 +1507,9 @@ pushring(const Arg *arg)
 {
 	/* Move the selected client one step around the tiled layout:
 	 * clockwise (arg->i > 0) runs down the stack, up the master
-	 * column, and back to the top of the stack. At a corner it is
-	 * reinserted there and the clients between shift by one. */
-	Client *sel = selmon->sel, *c, **tc;
+	 * column, and back to the top of the stack. It swaps places with
+	 * the client in the next position, so no other client moves. */
+	Client *sel = selmon->sel, *a, *b, *c, **pa, **pb;
 	int i, n, k, t;
 
 	if (!sel)
@@ -1532,14 +1532,25 @@ pushring(const Arg *arg)
 		else
 			t = i == k - 1 ? (k < n ? n - 1 : 0) : i + 1;
 	}
-	/* reinsert sel before the t-th remaining tiled client, or at the
-	 * end of the list when t is past the last one */
-	detach(sel);
-	for (n = 0, tc = &selmon->clients; *tc; tc = &(*tc)->next)
-		if (nexttiled(*tc) == *tc && n++ == t)
-			break;
-	sel->next = *tc;
-	*tc = sel;
+	for (n = 0, c = nexttiled(selmon->clients); n < t;
+	    c = nexttiled(c->next), n++);
+	/* swap sel and c in the list; a is whichever comes first, and
+	 * pa and pb are the links pointing at a and b */
+	for (pa = &selmon->clients; *pa != sel && *pa != c;
+	    pa = &(*pa)->next);
+	a = *pa;
+	b = a == sel ? c : sel;
+	for (pb = &a->next; *pb != b; pb = &(*pb)->next);
+	if (a->next == b) {
+		a->next = b->next;
+		b->next = a;
+	} else {
+		c = a->next;
+		a->next = b->next;
+		b->next = c;
+		*pb = a;
+	}
+	*pa = b;
 	focus(sel);
 	arrange(selmon);
 }
