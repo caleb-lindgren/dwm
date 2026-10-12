@@ -230,6 +230,7 @@ static void seturgent(Client *c, int urg);
 static void show(const Arg *arg);
 static void showall(const Arg *arg);
 static void showwin(Client *c);
+static void unhidewin(Client *c);
 static void showhide(Client *c);
 static void spawn(const Arg *arg);
 static void tag(const Arg *arg);
@@ -1986,14 +1987,14 @@ showall(const Arg *arg)
 	selmon->hidsel = NULL;
 	for (c = selmon->clients; c; c = c->next) {
 		if (ISVISIBLE(c))
-			showwin(c);
+			unhidewin(c);
 	}
 	if (!selmon->sel) {
 		for (c = selmon->clients; c && !ISVISIBLE(c); c = c->next);
 		if (c)
 			focus(c);
 	}
-	restack(selmon);
+	arrange(selmon);
 }
 
 void
@@ -2001,11 +2002,20 @@ showwin(Client *c)
 {
 	if (!c || !HIDDEN(c))
 		return;
+	unhidewin(c);
+	arrange(c->mon);
+}
 
+/* showwin() without re-tiling, for callers that arrange once after
+ * unhiding several clients */
+void
+unhidewin(Client *c)
+{
+	if (!HIDDEN(c))
+		return;
 	XMapWindow(dpy, c->win);
 	setclientstate(c, NormalState);
 	c->ishidden = 0;
-	arrange(c->mon);
 }
 
 void

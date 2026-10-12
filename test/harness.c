@@ -473,6 +473,7 @@ test_efficiency(void)
 	Window w[10];
 	unsigned long before;
 	int i;
+	Arg a;
 
 	viewtag(1);
 	for (i = 0; i < 10; i++)
@@ -486,6 +487,24 @@ test_efficiency(void)
 	drawbar(selmon);
 	printf("INFO property reads for one drawbar() with 10 clients: %lu\n",
 		nprop - before);
+	for (i = 0; i < 10; i++) {
+		focus(wintoclient(w[i]));
+		hide(NULL);
+	}
+	pump();
+	before = NextRequest(dpy);
+	showall(NULL);
+	XSync(dpy, False);
+	printf("INFO X requests for showall() of 10 hidden clients: %lu\n",
+		NextRequest(dpy) - before);
+	pump();
+	before = NextRequest(dpy);
+	a.i = +1;
+	switchall(&a);
+	XSync(dpy, False);
+	printf("INFO X requests for switchall() of 10 clients: %lu\n",
+		NextRequest(dpy) - before);
+	pump();
 	destroyall();
 }
 

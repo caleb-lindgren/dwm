@@ -100,7 +100,8 @@ void tagtoleft(const Arg *arg) {
     }
 }
 
-/* same as sendmon but don't change tags */
+/* same as sendmon but don't change tags, and leave focusing and
+ * re-tiling to the caller */
 void sendmonwithtags(Client *c, Monitor *m)
 {
 	if (c->mon == m)
@@ -112,8 +113,6 @@ void sendmonwithtags(Client *c, Monitor *m)
 	/* no change to tags */
 	attach(c);
 	attachstack(c);
-	focus(NULL);
-	arrange(NULL);
 }
 
 /* move all clients from one monitor to another, preserving tags */
@@ -129,6 +128,8 @@ void switchall(const Arg *arg) {
 		for (c = selmon->clients; c->next; c = c->next);
 		sendmonwithtags(c, m);
 	}
+	focus(NULL);
+	arrange(NULL);
 }
 
 /* commands */
