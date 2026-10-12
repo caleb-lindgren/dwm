@@ -49,10 +49,10 @@
 #define CLEANMASK(mask)         (mask & ~(numlockmask|LockMask) & (ShiftMask|ControlMask|Mod1Mask|Mod2Mask|Mod3Mask|Mod4Mask|Mod5Mask))
 #define INTERSECT(x,y,w,h,m)    (MAX(0, MIN((x)+(w),(m)->wx+(m)->ww) - MAX((x),(m)->wx)) \
                                * MAX(0, MIN((y)+(h),(m)->wy+(m)->wh) - MAX((y),(m)->wy)))
-#define ISVISIBLEONTAG(C, T)    ((C->tags & T))
+#define ISVISIBLEONTAG(C, T)    (((C)->tags & (T)))
 #define ISVISIBLE(C)            \
                         ISVISIBLEONTAG(C, C->mon->tagset[C->mon->seltags])
-#define HIDDEN(C)               ((getstate(C->win) == IconicState))
+#define HIDDEN(C)               ((C)->ishidden)
 #define MOUSEMASK               (BUTTONMASK|PointerMotionMask)
 #define WIDTH(X)                ((X)->w + 2 * (X)->bw)
 #define HEIGHT(X)               ((X)->h + 2 * (X)->bw)
@@ -97,6 +97,7 @@ struct Client {
 	int tabw;  /* width of this client's title in the bar */
 	unsigned int tags;
 	int isfixed, isfloating, isurgent, neverfocus, oldstate, isfullscreen;
+	int ishidden; /* unmapped and in IconicState by hidewin() */
 	Client *next;
 	Client *snext;
 	Monitor *mon;
@@ -129,7 +130,8 @@ struct Monitor {
 	unsigned int tagset[2];
 	int showbar;
 	int topbar;
-	int hidsel;
+	Client *hidsel; /* hidden client shown by focusstackhid() until
+	                 * focus moves off it */
 	Client *clients;
 	Client *sel;
 	Client *stack;
@@ -159,6 +161,7 @@ static void attachaside(Client *c);
 static void attachbelow(Client *c);
 static void attachbottom(Client *c);
 static void attachtop(Client *c);
+static void attachdir(Client *c);
 static void attachstack(Client *c);
 static void buttonpress(XEvent *e);
 static void checkotherwm(void);
@@ -204,6 +207,7 @@ static Client *nexttagged(Client *c);
 static Client *nexttiled(Client *c);
 static void pop(Client *c);
 static void propertynotify(XEvent *e);
+static unsigned int pertagslot(unsigned int tagset);
 static void pushring(const Arg *arg);
 static void quit(const Arg *arg);
 static Monitor *recttomon(int x, int y, int w, int h);
@@ -493,21 +497,42 @@ attachbottom(Client *c)
 void
 attachtop(Client *c)
 {
-	int n;
-	Client *below;
+	int n = 0;
+	Client **tc;
 
-	for (n = 1, below = c->mon->clients;
-		below && below->next && (below->isfloating
-		|| !ISVISIBLEONTAG(below, c->tags) || n != c->mon->nmaster);
-		n = below->isfloating || !ISVISIBLEONTAG(below, c->tags)
-		? n + 0 : n + 1, below = below->next);
-	c->next = NULL;
-	if (below) {
-		c->next = below->next;
-		below->next = c;
+	/* insert after the nmaster-th tiled client on c's tags, or at the
+	 * end of the list when there are fewer */
+	for (tc = &c->mon->clients; *tc && n < c->mon->nmaster;
+	    tc = &(*tc)->next)
+		if (!(*tc)->isfloating && ISVISIBLEONTAG(*tc, c->tags)
+		&& !HIDDEN(*tc))
+			n++;
+	c->next = *tc;
+	*tc = c;
+}
+
+void
+attachdir(Client *c)
+{
+	switch (attachdirection) {
+	case 1:
+		attachabove(c);
+		break;
+	case 2:
+		attachaside(c);
+		break;
+	case 3:
+		attachbelow(c);
+		break;
+	case 4:
+		attachbottom(c);
+		break;
+	case 5:
+		attachtop(c);
+		break;
+	default:
+		attach(c);
 	}
-	else
-		c->mon->clients = c;
 }
 
 void
@@ -594,10 +619,17 @@ cleanup(void)
 	Arg a = {.ui = ~0};
 	Layout foo = { "", NULL };
 	Monitor *m;
+	Client *c;
 	size_t i;
 
 	view(&a);
 	selmon->lt[selmon->sellt] = &foo;
+	/* unmanage() withdraws the clients, and a restarted dwm adopts only
+	 * withdrawn windows that are mapped, so map the hidden ones */
+	for (m = mons; m; m = m->next)
+		for (c = m->clients; c; c = c->next)
+			if (HIDDEN(c))
+				XMapWindow(dpy, c->win);
 	for (m = mons; m; m = m->next)
 		while (m->stack)
 			unmanage(m->stack, 0);
@@ -629,6 +661,7 @@ cleanupmon(Monitor *mon)
 	}
 	XUnmapWindow(dpy, mon->barwin);
 	XDestroyWindow(dpy, mon->barwin);
+	free(mon->pertag);
 	free(mon);
 }
 
@@ -809,8 +842,11 @@ detachstack(Client *c)
 	for (tc = &c->mon->stack; *tc && *tc != c; tc = &(*tc)->snext);
 	*tc = c->snext;
 
+	if (c == c->mon->hidsel)
+		c->mon->hidsel = NULL;
 	if (c == c->mon->sel) {
-		for (t = c->mon->stack; t && !ISVISIBLE(t); t = t->snext);
+		for (t = c->mon->stack; t && (!ISVISIBLE(t) || HIDDEN(t));
+		    t = t->snext);
 		c->mon->sel = t;
 	}
 }
@@ -891,7 +927,10 @@ drawbar(Monitor *m)
 			drw_setscheme(drw, scheme[SchemeNorm]);
 			drw_rect(drw, x, 0, w, bh, 1, 1);
 		}
-	}
+	} else if (n > 0)
+		/* no titles drawn: give them no width so that buttonpress()
+		 * does not map clicks to tabs from an earlier draw */
+		settabwidths(m, n, 0);
 	drw_map(drw, m->barwin, 0, 0, m->ww, bh);
 }
 
@@ -938,15 +977,11 @@ focus(Client *c)
 {
 	if (!c || !ISVISIBLE(c))
 		for (c = selmon->stack; c && (!ISVISIBLE(c) || HIDDEN(c)); c = c->snext);
-	if (selmon->sel && selmon->sel != c) {
+	if (selmon->sel && selmon->sel != c)
 		unfocus(selmon->sel, 0);
-
-		if (selmon->hidsel) {
-			hidewin(selmon->sel);
-			if (c)
-				arrange(c->mon);
-			selmon->hidsel = 0;
-		}
+	if (selmon->hidsel && selmon->hidsel != c) {
+		hidewin(selmon->hidsel);
+		arrange(selmon);
 	}
 	if (c) {
 		if (c->mon != selmon)
@@ -1004,40 +1039,39 @@ void
 focusstack(int inc, int hid)
 {
 	Client *c = NULL, *i;
-	// if no client selected AND exclude hidden client; if client selected but fullscreened
-	if ((!selmon->sel && !hid) || (selmon->sel && selmon->sel->isfullscreen && lockfullscreen))
+
+	if (selmon->sel && selmon->sel->isfullscreen && lockfullscreen)
 		return;
-	if (!selmon->clients)
-		return;
+	/* with no selection, inc > 0 starts from the first client and
+	 * inc < 0 from the last */
+#define FOCUSABLE(C) (ISVISIBLE(C) && (hid || !HIDDEN(C)))
 	if (inc > 0) {
 		if (selmon->sel)
-			for (c = selmon->sel->next;
-					c && (!ISVISIBLE(c) || (!hid && HIDDEN(c)));
-					c = c->next);
+			for (c = selmon->sel->next; c && !FOCUSABLE(c);
+			    c = c->next);
 		if (!c)
-			for (c = selmon->clients;
-					c && (!ISVISIBLE(c) || (!hid && HIDDEN(c)));
-					c = c->next);
+			for (c = selmon->clients; c && !FOCUSABLE(c);
+			    c = c->next);
 	} else {
-		if (selmon->sel) {
-			for (i = selmon->clients; i != selmon->sel; i = i->next)
-				if (ISVISIBLE(i) && !(!hid && HIDDEN(i)))
-					c = i;
-		} else
-			c = selmon->clients;
+		for (i = selmon->clients; i != selmon->sel; i = i->next)
+			if (FOCUSABLE(i))
+				c = i;
 		if (!c)
 			for (; i; i = i->next)
-				if (ISVISIBLE(i) && !(!hid && HIDDEN(i)))
+				if (FOCUSABLE(i))
 					c = i;
 	}
-	if (c) {
+#undef FOCUSABLE
+	if (!c)
+		return;
+	if (HIDDEN(c)) {
+		/* map before focusing: an unmapped window cannot take focus */
+		showwin(c);
 		focus(c);
-		restack(selmon);
-		if (HIDDEN(c)) {
-			showwin(c);
-			c->mon->hidsel = 1;
-		}
-	}
+		selmon->hidsel = c;
+	} else
+		focus(c);
+	restack(selmon);
 }
 
 Atom
@@ -1182,6 +1216,9 @@ hidewin(Client *c) {
 	XSelectInput(dpy, w, ca.your_event_mask & ~StructureNotifyMask);
 	XUnmapWindow(dpy, w);
 	setclientstate(c, IconicState);
+	c->ishidden = 1;
+	if (c->mon->hidsel == c)
+		c->mon->hidsel = NULL;
 	XSelectInput(dpy, root, ra.your_event_mask);
 	XSelectInput(dpy, w, ca.your_event_mask);
 	XUngrabServer(dpy);
@@ -1247,6 +1284,8 @@ manage(Window w, XWindowAttributes *wa)
 
 	c = ecalloc(1, sizeof(Client));
 	c->win = w;
+	/* a window left iconic, e.g. by an earlier dwm, stays hidden */
+	c->ishidden = getstate(w) == IconicState;
 	/* geometry */
 	c->x = c->oldx = wa->x;
 	c->y = c->oldy = wa->y;
@@ -1284,34 +1323,18 @@ manage(Window w, XWindowAttributes *wa)
 		c->isfloating = c->oldstate = trans != None || c->isfixed;
 	if (c->isfloating)
 		XRaiseWindow(dpy, c->win);
-	switch(attachdirection){
-		case 1:
-			attachabove(c);
-			break;
-		case 2:
-			attachaside(c);
-			break;
-		case 3:
-			attachbelow(c);
-			break;
-		case 4:
-			attachbottom(c);
-			break;
-		case 5:
-			attachtop(c);
-			break;
-		default:
-			attach(c);
-	}
+	attachdir(c);
 	attachstack(c);
 	XChangeProperty(dpy, root, netatom[NetClientList], XA_WINDOW, 32, PropModeAppend,
 		(unsigned char *) &(c->win), 1);
 	XMoveResizeWindow(dpy, c->win, c->x + 2 * sw, c->y, c->w, c->h); /* some windows require this */
 	if (!HIDDEN(c))
 		setclientstate(c, NormalState);
-	if (c->mon == selmon)
-		unfocus(selmon->sel, 0);
-	c->mon->sel = c;
+	if (!HIDDEN(c)) {
+		if (c->mon == selmon)
+			unfocus(selmon->sel, 0);
+		c->mon->sel = c;
+	}
 	arrange(c->mon);
 	if (!HIDDEN(c))
 		XMapWindow(dpy, c->win);
@@ -1347,7 +1370,7 @@ monocle(Monitor *m)
 	Client *c;
 
 	for (c = m->clients; c; c = c->next)
-		if (ISVISIBLE(c))
+		if (ISVISIBLE(c) && !HIDDEN(c))
 			n++;
 	if (n > 0) /* override layout symbol */
 		snprintf(m->ltsymbol, sizeof m->ltsymbol, "[%d]", n);
@@ -1437,7 +1460,7 @@ nexttagged(Client *c) {
 	Client *walked = c->mon->clients;
 	for(;
 		walked && (walked->isfloating
-		|| !ISVISIBLEONTAG(walked, c->tags));
+		|| !ISVISIBLEONTAG(walked, c->tags) || HIDDEN(walked));
 		walked = walked->next
 	);
 	return walked;
@@ -1488,12 +1511,26 @@ propertynotify(XEvent *e)
 		}
 		if (ev->atom == XA_WM_NAME || ev->atom == netatom[NetWMName]) {
 			updatetitle(c);
-			if (c == c->mon->sel)
+			/* every visible client's title is in the bar */
+			if (ISVISIBLE(c))
 				drawbar(c->mon);
 		}
 		if (ev->atom == netatom[NetWMWindowType])
 			updatewindowtype(c);
 	}
+}
+
+/* The pertag slot for a tagset: 0 when every tag is viewed, otherwise
+ * 1 + the index of its first tag. tagset must be nonzero. */
+unsigned int
+pertagslot(unsigned int tagset)
+{
+	unsigned int i;
+
+	if (tagset == TAGMASK)
+		return 0;
+	for (i = 0; !(tagset & 1 << i); i++);
+	return i + 1;
 }
 
 void
@@ -1531,16 +1568,6 @@ pushring(const Arg *arg)
 void
 quit(const Arg *arg)
 {
-	// fix: reloading dwm keeps all the hidden clients hidden
-	Monitor *m;
-	Client *c;
-	for (m = mons; m; m = m->next) {
-		if (m) {
-			for (c = m->stack; c; c = c->next)
-				if (c && HIDDEN(c)) showwin(c);
-		}
-	}
-
 	running = 0;
 }
 
@@ -1710,25 +1737,7 @@ sendmon(Client *c, Monitor *m)
 	detachstack(c);
 	c->mon = m;
 	c->tags = m->tagset[m->seltags]; /* assign tags of target monitor */
-	switch(attachdirection){
-		case 1:
-			attachabove(c);
-			break;
-		case 2:
-			attachaside(c);
-			break;
-		case 3:
-			attachbelow(c);
-			break;
-		case 4:
-			attachbottom(c);
-			break;
-		case 5:
-			attachtop(c);
-			break;
-		default:
-			attach(c);
-	}
+	attachdir(c);
 	attachstack(c);
 	if (c->isfullscreen)
 		resizeclient(c, m->mx, m->my, m->mw, m->mh);
@@ -1966,8 +1975,7 @@ seturgent(Client *c, int urg)
 void
 show(const Arg *arg)
 {
-	if (selmon->hidsel)
-		selmon->hidsel = 0;
+	selmon->hidsel = NULL;
 	showwin(selmon->sel);
 }
 
@@ -1975,7 +1983,7 @@ void
 showall(const Arg *arg)
 {
 	Client *c = NULL;
-	selmon->hidsel = 0;
+	selmon->hidsel = NULL;
 	for (c = selmon->clients; c; c = c->next) {
 		if (ISVISIBLE(c))
 			showwin(c);
@@ -1996,6 +2004,7 @@ showwin(Client *c)
 
 	XMapWindow(dpy, c->win);
 	setclientstate(c, NormalState);
+	c->ishidden = 0;
 	arrange(c->mon);
 }
 
@@ -2127,21 +2136,15 @@ void
 toggleview(const Arg *arg)
 {
 	unsigned int newtagset = selmon->tagset[selmon->seltags] ^ (arg->ui & TAGMASK);
-	int i;
 
 	if (newtagset) {
 		selmon->tagset[selmon->seltags] = newtagset;
 
-		if (newtagset == ~0) {
+		/* keep the current slot while its tag is still viewed */
+		if (newtagset == TAGMASK || !selmon->pertag->curtag
+		|| !(newtagset & 1 << (selmon->pertag->curtag - 1))) {
 			selmon->pertag->prevtag = selmon->pertag->curtag;
-			selmon->pertag->curtag = 0;
-		}
-
-		/* test if the user did not select the same tag */
-		if (!(newtagset & 1 << (selmon->pertag->curtag - 1))) {
-			selmon->pertag->prevtag = selmon->pertag->curtag;
-			for (i = 0; !(newtagset & 1 << i); i++) ;
-			selmon->pertag->curtag = i + 1;
+			selmon->pertag->curtag = pertagslot(newtagset);
 		}
 
 		/* apply settings for this view */
@@ -2164,6 +2167,8 @@ togglewin(const Arg *arg)
 {
 	Client *c = (Client*)arg->v;
 
+	if (!c)
+		return;
 	if (c == selmon->sel) {
 		hidewin(c);
 		focus(NULL);
@@ -2329,25 +2334,7 @@ updategeom(void)
 				m->clients = c->next;
 				detachstack(c);
 				c->mon = mons;
-				switch(attachdirection){
-				case 1:
-					attachabove(c);
-					break;
-				case 2:
-					attachaside(c);
-					break;
-				case 3:
-					attachbelow(c);
-					break;
-				case 4:
-					attachbottom(c);
-					break;
-				case 5:
-					attachtop(c);
-					break;
-				default:
-					attach(c);
-				}
+				attachdir(c);
 				attachstack(c);
 			}
 			if (m == selmon)
@@ -2486,7 +2473,6 @@ updatewmhints(Client *c)
 void
 view(const Arg *arg)
 {
-	int i;
 	unsigned int tmptag;
 
 	if ((arg->ui & TAGMASK) == selmon->tagset[selmon->seltags])
@@ -2495,17 +2481,18 @@ view(const Arg *arg)
 	if (arg->ui & TAGMASK) {
 		selmon->tagset[selmon->seltags] = arg->ui & TAGMASK;
 		selmon->pertag->prevtag = selmon->pertag->curtag;
-
-		if (arg->ui == ~0)
-			selmon->pertag->curtag = 0;
-		else {
-			for (i = 0; !(arg->ui & 1 << i); i++) ;
-			selmon->pertag->curtag = i + 1;
-		}
+		selmon->pertag->curtag = pertagslot(arg->ui & TAGMASK);
 	} else {
 		tmptag = selmon->pertag->prevtag;
 		selmon->pertag->prevtag = selmon->pertag->curtag;
 		selmon->pertag->curtag = tmptag;
+		/* toggleview() can move curtag without starting a new
+		 * tagset, so prevtag may not be in the restored one */
+		tmptag = selmon->tagset[selmon->seltags];
+		if (selmon->pertag->curtag
+		    ? !(tmptag & 1 << (selmon->pertag->curtag - 1))
+		    : tmptag != TAGMASK)
+			selmon->pertag->curtag = pertagslot(tmptag);
 	}
 
 	selmon->nmaster = selmon->pertag->nmasters[selmon->pertag->curtag];

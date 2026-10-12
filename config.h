@@ -83,7 +83,7 @@ void tagtoright(const Arg *arg) {
     if(selmon->sel != NULL
     && __builtin_popcount(selmon->tagset[selmon->seltags] & TAGMASK) == 1
     && selmon->tagset[selmon->seltags] & (TAGMASK >> 1)) {
-        selmon->sel->tags <<= 1;
+        selmon->sel->tags = (selmon->sel->tags << 1) & TAGMASK;
         focus(NULL);
         arrange(selmon);
     }
