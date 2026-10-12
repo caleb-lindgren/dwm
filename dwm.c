@@ -557,8 +557,11 @@ buttonpress(XEvent *e)
 						x += c->tabw;
 				} while (ev->x > x && (c = c->next));
 
-				click = ClkWinTitle;
-				arg.v = c;
+				/* c is NULL if no client is visible */
+				if (c) {
+					click = ClkWinTitle;
+					arg.v = c;
+				}
 			}
 		}
 	} else if ((c = wintoclient(ev->window))) {
