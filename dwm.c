@@ -220,6 +220,7 @@ static void setfullscreen(Client *c, int fullscreen);
 static void setlayout(const Arg *arg);
 static void setmfact(const Arg *arg);
 static void setup(void);
+static void settabwidths(Monitor *m, int n, int w);
 static void seturgent(Client *c, int urg);
 static void show(const Arg *arg);
 static void showall(const Arg *arg);
@@ -868,16 +869,7 @@ drawbar(Monitor *m)
 
 	if ((w = m->ww - tw - x) > bh) {
 		if (n > 0) {
-			/* give each title its natural width plus an equal share of
-			 * the spare room; if they do not all fit, divide equally */
-			int total = 0, extra, remainder;
-			for (c = m->clients; c; c = c->next)
-				if (ISVISIBLE(c))
-					total += TEXTW(c->name);
-			if (total > w)
-				total = 0;
-			extra = (w - total) / n;
-			remainder = (w - total) % n;
+			settabwidths(m, n, w);
 			for (c = m->clients; c; c = c->next) {
 				if (!ISVISIBLE(c))
 					continue;
@@ -888,9 +880,6 @@ drawbar(Monitor *m)
 				else
 					scm = SchemeNorm;
 				drw_setscheme(drw, scheme[scm]);
-
-				c->tabw = (total ? TEXTW(c->name) : 0) + extra
-					+ (remainder-- > 0);
 				drw_text(drw, x, 0, c->tabw, bh, lrpad / 2, c->name, 0);
 				x += c->tabw;
 			}
@@ -1842,6 +1831,42 @@ setmfact(const Arg *arg)
 		return;
 	selmon->mfact = selmon->pertag->mfacts[selmon->pertag->curtag] = f;
 	arrange(selmon);
+}
+
+/* Size the n visible clients' bar titles to fill width w. If all titles
+ * fit, the narrowest tabs are raised to a common width and titles wider
+ * than that keep their natural width, which minimises the differences
+ * between tabs; otherwise the width is divided equally. */
+void
+settabwidths(Monitor *m, int n, int w)
+{
+	int total = 0, fixed = 0, nfixed = 0, level, remainder, done;
+	Client *c;
+
+	/* tabw != 0 marks a tab kept at its natural width */
+	for (c = m->clients; c; c = c->next)
+		if (ISVISIBLE(c)) {
+			c->tabw = 0;
+			total += TEXTW(c->name);
+		}
+	if (total <= w)
+		do {
+			done = 1;
+			level = (w - fixed) / (n - nfixed);
+			for (c = m->clients; c; c = c->next)
+				if (ISVISIBLE(c) && !c->tabw
+				&& (int)TEXTW(c->name) > level) {
+					c->tabw = TEXTW(c->name);
+					fixed += c->tabw;
+					nfixed++;
+					done = 0;
+				}
+		} while (!done);
+	level = (w - fixed) / (n - nfixed);
+	remainder = (w - fixed) % (n - nfixed);
+	for (c = m->clients; c; c = c->next)
+		if (ISVISIBLE(c) && !c->tabw)
+			c->tabw = level + (remainder-- > 0);
 }
 
 void
