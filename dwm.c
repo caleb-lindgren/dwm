@@ -93,7 +93,8 @@ struct Client {
 	int oldx, oldy, oldw, oldh;
 	int basew, baseh, incw, inch, maxw, maxh, minw, minh, hintsvalid;
 	int bw, oldbw;
-	int tabw; /* width of this client's title in the bar */
+	int namew; /* natural width of name in the bar */
+	int tabw;  /* width of this client's title in the bar */
 	unsigned int tags;
 	int isfixed, isfloating, isurgent, neverfocus, oldstate, isfullscreen;
 	Client *next;
@@ -1850,7 +1851,7 @@ settabwidths(Monitor *m, int n, int w)
 	for (c = m->clients; c; c = c->next)
 		if (ISVISIBLE(c)) {
 			c->tabw = 0;
-			total += TEXTW(c->name);
+			total += c->namew;
 		}
 	if (total <= w)
 		do {
@@ -1858,8 +1859,8 @@ settabwidths(Monitor *m, int n, int w)
 			level = (w - fixed) / (n - nfixed);
 			for (c = m->clients; c; c = c->next)
 				if (ISVISIBLE(c) && !c->tabw
-				&& (int)TEXTW(c->name) > level) {
-					c->tabw = TEXTW(c->name);
+				&& c->namew > level) {
+					c->tabw = c->namew;
 					fixed += c->tabw;
 					nfixed++;
 					done = 0;
@@ -2448,6 +2449,7 @@ updatetitle(Client *c)
 		gettextprop(c->win, XA_WM_NAME, c->name, sizeof c->name);
 	if (c->name[0] == '\0') /* hack to mark broken clients */
 		strcpy(c->name, broken);
+	c->namew = TEXTW(c->name);
 }
 
 void
