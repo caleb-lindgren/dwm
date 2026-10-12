@@ -93,6 +93,7 @@ struct Client {
 	int oldx, oldy, oldw, oldh;
 	int basew, baseh, incw, inch, maxw, maxh, minw, minh, hintsvalid;
 	int bw, oldbw;
+	int tabw; /* width of this client's title in the bar */
 	unsigned int tags;
 	int isfixed, isfloating, isurgent, neverfocus, oldstate, isfullscreen;
 	Client *next;
@@ -120,8 +121,6 @@ struct Monitor {
 	int nmaster;
 	int num;
 	int by;               /* bar geometry */
-	int btw;              /* width of tasks portion of bar */
-	int bt;               /* number of tasks */
 	int mx, my, mw, mh;   /* screen size */
 	int wx, wy, ww, wh;   /* window area  */
 	unsigned int seltags;
@@ -554,7 +553,7 @@ buttonpress(XEvent *e)
 					if (!ISVISIBLE(c))
 						continue;
 					else
-						x +=(1.0 / (double)m->bt) * m->btw;
+						x += c->tabw;
 				} while (ev->x > x && (c = c->next));
 
 				click = ClkWinTitle;
@@ -869,8 +868,16 @@ drawbar(Monitor *m)
 
 	if ((w = m->ww - tw - x) > bh) {
 		if (n > 0) {
-			int remainder = w % n;
-			int tabw = (1.0 / (double)n) * w + 1;
+			/* give each title its natural width plus an equal share of
+			 * the spare room; if they do not all fit, divide equally */
+			int total = 0, extra, remainder;
+			for (c = m->clients; c; c = c->next)
+				if (ISVISIBLE(c))
+					total += TEXTW(c->name);
+			if (total > w)
+				total = 0;
+			extra = (w - total) / n;
+			remainder = (w - total) % n;
 			for (c = m->clients; c; c = c->next) {
 				if (!ISVISIBLE(c))
 					continue;
@@ -882,22 +889,16 @@ drawbar(Monitor *m)
 					scm = SchemeNorm;
 				drw_setscheme(drw, scheme[scm]);
 
-				if (remainder >= 0) {
-					if (remainder == 0) {
-						tabw--;
-					}
-					remainder--;
-				}
-				drw_text(drw, x, 0, tabw, bh, lrpad / 2, c->name, 0);
-				x += tabw;
+				c->tabw = (total ? TEXTW(c->name) : 0) + extra
+					+ (remainder-- > 0);
+				drw_text(drw, x, 0, c->tabw, bh, lrpad / 2, c->name, 0);
+				x += c->tabw;
 			}
 		} else {
 			drw_setscheme(drw, scheme[SchemeNorm]);
 			drw_rect(drw, x, 0, w, bh, 1, 1);
 		}
 	}
-	m->bt = n;
-	m->btw = w;
 	drw_map(drw, m->barwin, 0, 0, m->ww, bh);
 }
 
