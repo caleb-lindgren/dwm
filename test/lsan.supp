@@ -1,0 +1,5 @@
+leak:libX11
+leak:libfontconfig
+leak:libXft
+leak:libxcb
+leak:libfreetype
