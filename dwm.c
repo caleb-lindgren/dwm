@@ -1505,12 +1505,13 @@ propertynotify(XEvent *e)
 void
 pushring(const Arg *arg)
 {
-	/* Move the selected client one step around the tiled layout:
-	 * clockwise (arg->i > 0) runs down the stack, up the master
-	 * column, and back to the top of the stack. It swaps places with
-	 * the client in the next position, so no other client moves. */
-	Client *sel = selmon->sel, *a, *b, *c, **pa, **pb;
-	int i, n, k, t;
+	/* Move the selected client one place along the tiled list, which
+	 * starts at the first master: down the list for arg->i > 0, up it
+	 * otherwise, swapping places with its neighbour. Pushing past
+	 * either end wraps around: the last client becomes the first and
+	 * the first becomes the last, the others shifting by one. */
+	Client *sel = selmon->sel, *c, **tc;
+	int i, n, t;
 
 	if (!sel)
 		return;
@@ -1520,37 +1521,15 @@ pushring(const Arg *arg)
 			i = n;
 	if (i < 0 || n < 2)
 		return;
-	k = MIN(selmon->nmaster, n);
-	if (arg->i > 0) {
-		if (i >= k)
-			t = i == n - 1 ? MAX(k - 1, 0) : i + 1;
-		else
-			t = i == 0 ? MIN(k, n - 1) : i - 1;
-	} else {
-		if (i >= k)
-			t = i == k ? (k > 0 ? 0 : n - 1) : i - 1;
-		else
-			t = i == k - 1 ? (k < n ? n - 1 : 0) : i + 1;
-	}
-	for (n = 0, c = nexttiled(selmon->clients); n < t;
-	    c = nexttiled(c->next), n++);
-	/* swap sel and c in the list; a is whichever comes first, and
-	 * pa and pb are the links pointing at a and b */
-	for (pa = &selmon->clients; *pa != sel && *pa != c;
-	    pa = &(*pa)->next);
-	a = *pa;
-	b = a == sel ? c : sel;
-	for (pb = &a->next; *pb != b; pb = &(*pb)->next);
-	if (a->next == b) {
-		a->next = b->next;
-		b->next = a;
-	} else {
-		c = a->next;
-		a->next = b->next;
-		b->next = c;
-		*pb = a;
-	}
-	*pa = b;
+	t = (i + (arg->i > 0 ? 1 : n - 1)) % n;
+	/* reinsert sel before the t-th remaining tiled client, or at the
+	 * end of the list when t is past the last one */
+	detach(sel);
+	for (n = 0, tc = &selmon->clients; *tc; tc = &(*tc)->next)
+		if (nexttiled(*tc) == *tc && n++ == t)
+			break;
+	sel->next = *tc;
+	*tc = sel;
 	focus(sel);
 	arrange(selmon);
 }
