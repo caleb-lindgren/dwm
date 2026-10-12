@@ -118,12 +118,16 @@ void sendmonwithtags(Client *c, Monitor *m)
 
 /* move all clients from one monitor to another, preserving tags */
 void switchall(const Arg *arg) {
-	if (!selmon->clients || !mons->next)
+	Monitor *m = dirtomon(arg->i);
+	Client *c;
+
+	if (m == selmon)
 		return;
-	Client *c, *next;
-	for (c = selmon->clients; c; c = next) {
-		next = c->next;
-		sendmonwithtags(c, dirtomon(arg->i));
+	/* sendmonwithtags() attaches at the head of the target's list, so
+	 * send the last client first to keep the clients in order */
+	while (selmon->clients) {
+		for (c = selmon->clients; c->next; c = c->next);
+		sendmonwithtags(c, m);
 	}
 }
 

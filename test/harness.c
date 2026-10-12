@@ -434,6 +434,40 @@ test_settabwidths(void)
 }
 
 static void
+test_switchall_order(void)
+{
+	Monitor *src = selmon, *dst = dirtomon(+1);
+	Client *order[6], *c;
+	Arg arg = {.i = +1};
+	int i, n;
+
+	viewtag(1);
+	focus(NULL);
+	/* one client already on the target, which should end up below */
+	selmon = dst;
+	mkwin("already there");
+	selmon = src;
+	focus(NULL);
+	for (i = 0; i < 5; i++)
+		mkwin("s");
+	for (n = 0, c = src->clients; c; c = c->next)
+		order[n++] = c;
+	order[n] = dst->clients;
+	switchall(&arg);
+	pump();
+	CHECK(!src->clients, "clients left on the source monitor");
+	for (i = 0, c = dst->clients; c && i <= n; c = c->next, i++)
+		CHECK(c == order[i], "switchall changed the order at "
+			"position %d", i);
+	CHECK(i == n + 1 && !c, "target has %d clients, want %d", i, n + 1);
+	selmon = dst;
+	destroyall();
+	selmon = src;
+	focus(NULL);
+	pump();
+}
+
+static void
 test_efficiency(void)
 {
 	Window w[10];
@@ -679,6 +713,7 @@ main(int argc, char *argv[])
 	test_title_redraw();
 	test_title_click();
 	test_pushring();
+	test_switchall_order();
 	test_efficiency();
 	for (i = 0; i < nseeds; i++)
 		fuzz(i + 1, 400);
