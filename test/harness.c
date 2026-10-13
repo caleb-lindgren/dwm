@@ -718,6 +718,10 @@ main(int argc, char *argv[])
 	int i, nseeds = argc > 1 ? atoi(argv[1]) : 20;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
+	/* random bar clicks can hit bindings that spawn programs, such as
+	 * a terminal on the status text; make every exec fail so that none
+	 * opens on the test display and outlives the harness */
+	setenv("PATH", "/nonexistent", 1);
 	setlocale(LC_CTYPE, "");
 	if (!(dpy = XOpenDisplay(NULL)) || !(cdpy = XOpenDisplay(NULL)))
 		die("cannot open display");
