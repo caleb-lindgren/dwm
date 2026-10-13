@@ -387,7 +387,7 @@ test_settabwidths(void)
 {
 	Monitor fm = {0};
 	Client cl[12], *c;
-	int it, n, w, i, total, sum, lo, hi;
+	int it, n, w, i, total, sum, lo, hi, maxfit;
 
 	fm.tagset[0] = 1;
 	srand(1);
@@ -411,23 +411,31 @@ test_settabwidths(void)
 		if (!n)
 			continue;
 		settabwidths(&fm, n, w);
-		lo = 1 << 30; hi = -1;
+		/* lo, hi: narrowest and widest truncated tab; maxfit:
+		 * widest natural width of a tab that is not truncated */
+		lo = 1 << 30; hi = -1; maxfit = 0;
 		for (sum = 0, c = fm.clients; c; c = c->next) {
 			if (!ISVISIBLE(c))
 				continue;
 			sum += c->tabw;
-			if (total <= w && c->tabw < c->namew)
+			if (total <= w ? c->tabw < c->namew
+			    : c->tabw > c->namew)
 				break;
-			if (c->tabw < lo) lo = c->tabw;
-			if (c->tabw > hi) hi = c->tabw;
+			if (c->tabw < c->namew) {
+				if (c->tabw < lo) lo = c->tabw;
+				if (c->tabw > hi) hi = c->tabw;
+			} else if (c->namew > maxfit)
+				maxfit = c->namew;
 		}
 		if (sum != w || c) {
 			CHECK(0, "n %d w %d total %d: sum %d", n, w,
 				total, sum);
 			return;
 		}
-		if (total > w && hi - lo > 1) {
-			CHECK(0, "unequal fallback widths");
+		if (total > w && (hi - lo > 1 || maxfit > lo + 1)) {
+			CHECK(0, "n %d w %d total %d: truncated tabs %d..%d, "
+				"untruncated tab up to %d", n, w, total, lo,
+				hi, maxfit);
 			return;
 		}
 	}

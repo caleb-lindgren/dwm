@@ -1850,11 +1850,14 @@ setmfact(const Arg *arg)
 /* Size the n visible clients' bar titles to fill width w. If all titles
  * fit, the narrowest tabs are raised to a common width and titles wider
  * than that keep their natural width, which minimises the differences
- * between tabs; otherwise the width is divided equally. */
+ * between tabs. Otherwise titles narrower than an equal share keep their
+ * natural width and the space they leave is divided equally among the
+ * rest, repeated until the share no longer changes, so a title is only
+ * truncated if every truncated title gets the same width. */
 void
 settabwidths(Monitor *m, int n, int w)
 {
-	int total = 0, fixed = 0, nfixed = 0, level, remainder, done;
+	int total = 0, fixed = 0, nfixed = 0, fit, level, remainder, done;
 	Client *c;
 
 	/* tabw != 0 marks a tab kept at its natural width */
@@ -1863,19 +1866,19 @@ settabwidths(Monitor *m, int n, int w)
 			c->tabw = 0;
 			total += c->namew;
 		}
-	if (total <= w)
-		do {
-			done = 1;
-			level = (w - fixed) / (n - nfixed);
-			for (c = m->clients; c; c = c->next)
-				if (ISVISIBLE(c) && !c->tabw
-				&& c->namew > level) {
-					c->tabw = c->namew;
-					fixed += c->tabw;
-					nfixed++;
-					done = 0;
-				}
-		} while (!done);
+	fit = total <= w;
+	do {
+		done = 1;
+		level = (w - fixed) / (n - nfixed);
+		for (c = m->clients; c; c = c->next)
+			if (ISVISIBLE(c) && !c->tabw
+			&& (fit ? c->namew > level : c->namew <= level)) {
+				c->tabw = c->namew;
+				fixed += c->tabw;
+				nfixed++;
+				done = 0;
+			}
+	} while (!done);
 	level = (w - fixed) / (n - nfixed);
 	remainder = (w - fixed) % (n - nfixed);
 	for (c = m->clients; c; c = c->next)
