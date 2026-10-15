@@ -305,15 +305,16 @@ clickbar(int x, unsigned int button)
 static void
 test_title_click(void)
 {
-	Window w[4];
 	Client *c, *want;
 	int i, x, j;
+	Arg t = {.ui = 1 << 4};
 
 	viewtag(1);
 	for (i = 0; i < 4; i++)
-		w[i] = mkwin(i % 2 ? "short" : "a much longer window title");
-	{ Window o = mkwin("other"); Arg t = {.ui = 1 << 4};
-	  tag(&t); pump(); (void)o; }
+		mkwin(i % 2 ? "short" : "a much longer window title");
+	mkwin("other");
+	tag(&t);
+	pump();
 	for (j = 0; j < 4; j++) {
 		x = titlex0(selmon);
 		want = NULL;
