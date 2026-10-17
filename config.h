@@ -78,23 +78,25 @@ void shiftview(const Arg *arg) {
     view(&shifted);
 }
 
-/* Shift focused window one tag to the right */
+/* Shift focused window one tag to the right, wrapping from the last tag
+ * to the first */
 void tagtoright(const Arg *arg) {
     if(selmon->sel != NULL
-    && __builtin_popcount(selmon->tagset[selmon->seltags] & TAGMASK) == 1
-    && selmon->tagset[selmon->seltags] & (TAGMASK >> 1)) {
-        selmon->sel->tags = (selmon->sel->tags << 1) & TAGMASK;
+    && __builtin_popcount(selmon->tagset[selmon->seltags] & TAGMASK) == 1) {
+        selmon->sel->tags = ((selmon->sel->tags << 1)
+           | (selmon->sel->tags >> (LENGTH(tags) - 1))) & TAGMASK;
         focus(NULL);
         arrange(selmon);
     }
 }
 
-/* Shift focused window one tag to the left */
+/* Shift focused window one tag to the left, wrapping from the first tag
+ * to the last */
 void tagtoleft(const Arg *arg) {
     if(selmon->sel != NULL
-    && __builtin_popcount(selmon->tagset[selmon->seltags] & TAGMASK) == 1
-    && selmon->tagset[selmon->seltags] > 1) {
-        selmon->sel->tags >>= 1;
+    && __builtin_popcount(selmon->tagset[selmon->seltags] & TAGMASK) == 1) {
+        selmon->sel->tags = ((selmon->sel->tags >> 1)
+           | (selmon->sel->tags << (LENGTH(tags) - 1))) & TAGMASK;
         focus(NULL);
         arrange(selmon);
     }
