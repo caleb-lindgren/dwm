@@ -2341,14 +2341,23 @@ updategeom(void)
 			}
 		/* removed monitors if n > nn */
 		for (i = nn; i < n; i++) {
+			Client *prev = NULL;
 			for (m = mons; m && m->next; m = m->next);
 			while ((c = m->clients)) {
 				dirty = 1;
 				m->clients = c->next;
 				detachstack(c);
 				c->mon = mons;
-				attachdir(c);
+				/* keep the moved clients in their original order:
+				 * place the first by attachdirection, the rest
+				 * each below the one before it */
+				if (prev) {
+					c->next = prev->next;
+					prev->next = c;
+				} else
+					attachdir(c);
 				attachstack(c);
+				prev = c;
 			}
 			if (m == selmon)
 				selmon = mons;
