@@ -477,6 +477,37 @@ test_switchall_order(void)
 }
 
 static void
+test_moved_monitor_floats(void)
+{
+	Monitor *m = mons;
+	Client *c;
+	int x, y;
+
+	selmon = m;
+	viewtag(1);
+	c = wintoclient(mkwin("float"));
+	CHECK(c && c->mon == m, "new window not on the first monitor");
+	if (!c)
+		return;
+	c->isfloating = 1;
+	resize(c, m->wx + 40, m->wy + 30, 200, 150, 0);
+	/* pretend the monitor sat elsewhere until now, as it does after
+	 * the primary output changes */
+	m->mx -= 100;
+	m->my -= 50;
+	x = c->x - m->mx;
+	y = c->y - m->my;
+	updategeom();
+	arrange(NULL);
+	pump();
+	CHECK(c->x - m->mx == x && c->y - m->my == y,
+		"floating window at %d,%d from the monitor corner, want %d,%d",
+		c->x - m->mx, c->y - m->my, x, y);
+	destroyall();
+	focus(NULL);
+}
+
+static void
 test_efficiency(void)
 {
 	Window w[10];
@@ -746,6 +777,7 @@ main(int argc, char *argv[])
 	test_title_click();
 	test_pushring();
 	test_switchall_order();
+	test_moved_monitor_floats();
 	test_efficiency();
 	for (i = 0; i < nseeds; i++)
 		fuzz(i + 1, 400);

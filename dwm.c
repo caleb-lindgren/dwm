@@ -2303,7 +2303,7 @@ updategeom(void)
 
 #ifdef XINERAMA
 	if (XineramaIsActive(dpy)) {
-		int i, j, n, nn;
+		int i, j, n, nn, dx, dy;
 		Client *c;
 		Monitor *m;
 		XineramaScreenInfo *info = XineramaQueryScreens(dpy, &nn);
@@ -2332,6 +2332,17 @@ updategeom(void)
 			|| unique[i].width != m->mw || unique[i].height != m->mh)
 			{
 				dirty = 1;
+				/* a monitor that moved, e.g. because the
+				 * primary output changed, takes its floating
+				 * windows along at the same offset */
+				dx = unique[i].x_org - m->mx;
+				dy = unique[i].y_org - m->my;
+				for (c = m->clients; i < n && c; c = c->next) {
+					c->x += dx;
+					c->y += dy;
+					c->oldx += dx;
+					c->oldy += dy;
+				}
 				m->num = i;
 				m->mx = m->wx = unique[i].x_org;
 				m->my = m->wy = unique[i].y_org;
