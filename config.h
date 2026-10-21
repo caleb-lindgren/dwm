@@ -124,6 +124,7 @@ void switchall(const Arg *arg) {
 
 	if (m == selmon)
 		return;
+	movepertag(selmon, m);
 	/* sendmonwithtags() attaches at the head of the target's list, so
 	 * send the last client first to keep the clients in order */
 	while (selmon->clients) {

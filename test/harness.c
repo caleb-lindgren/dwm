@@ -476,6 +476,124 @@ test_switchall_order(void)
 	pump();
 }
 
+/* put m's per-tag settings back to the config defaults */
+static void
+resetpertag(Monitor *m)
+{
+	unsigned int i;
+
+	for (i = 0; i <= LENGTH(tags); i++) {
+		m->pertag->nmasters[i] = nmaster;
+		m->pertag->mfacts[i] = mfact;
+		m->pertag->sellts[i] = 0;
+		m->pertag->ltidxs[i][0] = &layouts[0];
+		m->pertag->ltidxs[i][1] = &layouts[1 % LENGTH(layouts)];
+		m->pertag->showbars[i] = showbar;
+	}
+	movepertag(m, m);
+	arrange(m);
+}
+
+static const Layout *
+slotlayout(Monitor *m, unsigned int slot)
+{
+	return m->pertag->ltidxs[slot][m->pertag->sellts[slot]];
+}
+
+static void
+test_switchall_pertag(void)
+{
+	Monitor *src = selmon, *dst = dirtomon(+1);
+	Arg mono = {.v = &layouts[2]}, flt = {.v = &layouts[1]};
+	Arg inc = {.i = +1}, arg = {.i = +1};
+
+	/* source: tag 1 monocle with an extra master, tag 2 default */
+	viewtag(1 << 1);
+	mkwin("src tag 2");
+	viewtag(1);
+	mkwin("src tag 1");
+	setlayout(&mono);
+	incnmaster(&inc);
+	/* target: tag 2 floating with a client of its own, viewing tag 1 */
+	selmon = dst;
+	viewtag(1 << 1);
+	mkwin("dst tag 2");
+	setlayout(&flt);
+	viewtag(1);
+	selmon = src;
+	focus(NULL);
+
+	switchall(&arg);
+	pump();
+	CHECK(slotlayout(dst, 1) == &layouts[2],
+		"tag 1 layout did not move with its clients");
+	CHECK(dst->pertag->nmasters[1] == nmaster + 1,
+		"tag 1 nmaster is %d, want %d", dst->pertag->nmasters[1],
+		nmaster + 1);
+	CHECK(dst->lt[dst->sellt] == &layouts[2]
+		&& dst->nmaster == nmaster + 1,
+		"target's current view did not take the moved settings");
+	CHECK(slotlayout(dst, 2) == &layouts[1],
+		"tag 2 layout replaced although the target had clients on it");
+	CHECK(slotlayout(dst, 3) == &layouts[0],
+		"unoccupied tag 3 layout changed");
+
+	selmon = dst;
+	destroyall();
+	resetpertag(dst);
+	resetpertag(src);
+	selmon = src;
+	viewtag(1);
+	focus(NULL);
+	pump();
+}
+
+static void
+test_removed_monitor_pertag(void)
+{
+	Monitor *gone, *m;
+	Arg mono = {.v = &layouts[2]};
+	int n;
+
+	/* a third monitor that the next updategeom() finds missing */
+	gone = createmon();
+	for (m = mons; m->next; m = m->next);
+	m->next = gone;
+	gone->num = m->num + 1;
+	gone->mx = gone->wx = m->mx;
+	gone->my = gone->wy = m->my;
+	gone->mw = gone->ww = m->mw;
+	gone->mh = gone->wh = m->mh;
+	updatebarpos(gone);
+	updatebars();
+
+	selmon = gone;
+	viewtag(1 << 2);
+	mkwin("on the removed monitor");
+	CHECK(gone->clients, "window not managed on the extra monitor");
+	setlayout(&mono);
+	selmon = mons;
+	viewtag(1 << 2);
+
+	updategeom();
+	arrange(NULL);
+	pump();
+	for (n = 0, m = mons; m; m = m->next, n++);
+	CHECK(n == 2, "%d monitors after the update, want 2", n);
+	CHECK(slotlayout(mons, 3) == &layouts[2],
+		"tag 3 layout did not move with the removed monitor's "
+		"clients");
+	CHECK(mons->lt[mons->sellt] == &layouts[2],
+		"current view did not take the moved layout");
+
+	destroyall();
+	resetpertag(mons);
+	selmon = mons;
+	viewtag(1);
+	focus(NULL);
+	pump();
+}
+
 static void
 test_moved_monitor_floats(void)
 {
@@ -777,6 +895,8 @@ main(int argc, char *argv[])
 	test_title_click();
 	test_pushring();
 	test_switchall_order();
+	test_switchall_pertag();
+	test_removed_monitor_pertag();
 	test_moved_monitor_floats();
 	test_efficiency();
 	for (i = 0; i < nseeds; i++)

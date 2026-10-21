@@ -203,6 +203,7 @@ static void maprequest(XEvent *e);
 static void monocle(Monitor *m);
 static void motionnotify(XEvent *e);
 static void movemouse(const Arg *arg);
+static void movepertag(Monitor *src, Monitor *m);
 static Client *nexttagged(Client *c);
 static Client *nexttiled(Client *c);
 static void pop(Client *c);
@@ -1397,6 +1398,47 @@ motionnotify(XEvent *e)
 }
 
 void
+movepertag(Monitor *src, Monitor *m)
+{
+	/* Before src's clients move to m, give m src's per-tag settings
+	 * for each tag src has clients on, so a tag's layout goes with its
+	 * windows. Where m already has clients on a tag, m keeps its own
+	 * settings for it. Slot 0, the view of every tag, counts as
+	 * occupied by any client. The caller re-arranges m. */
+	unsigned int i, t, srctags = 0, mtags = 0;
+	Pertag *s = src->pertag, *d = m->pertag;
+	Client *c;
+
+	for (c = src->clients; c; c = c->next)
+		srctags |= c->tags;
+	for (c = m->clients; c; c = c->next)
+		mtags |= c->tags;
+	for (i = 0; i <= LENGTH(tags); i++) {
+		t = i ? 1 << (i - 1) : TAGMASK;
+		if (!(srctags & t) || (mtags & t))
+			continue;
+		d->nmasters[i] = s->nmasters[i];
+		d->mfacts[i] = s->mfacts[i];
+		d->sellts[i] = s->sellts[i];
+		d->ltidxs[i][0] = s->ltidxs[i][0];
+		d->ltidxs[i][1] = s->ltidxs[i][1];
+		d->showbars[i] = s->showbars[i];
+	}
+
+	/* apply the settings of m's current view */
+	m->nmaster = d->nmasters[d->curtag];
+	m->mfact = d->mfacts[d->curtag];
+	m->sellt = d->sellts[d->curtag];
+	m->lt[0] = d->ltidxs[d->curtag][0];
+	m->lt[1] = d->ltidxs[d->curtag][1];
+	if (m->showbar != d->showbars[d->curtag]) {
+		m->showbar = d->showbars[d->curtag];
+		updatebarpos(m);
+		XMoveResizeWindow(dpy, m->barwin, m->wx, m->by, m->ww, bh);
+	}
+}
+
+void
 movemouse(const Arg *arg)
 {
 	int x, y, ocx, ocy, nx, ny;
@@ -2354,6 +2396,7 @@ updategeom(void)
 		for (i = nn; i < n; i++) {
 			Client *prev = NULL;
 			for (m = mons; m && m->next; m = m->next);
+			movepertag(m, mons);
 			while ((c = m->clients)) {
 				dirty = 1;
 				m->clients = c->next;
