@@ -1,0 +1,23 @@
+make: Entering directory '/home/caleb/system/dwm/test'
+cc -std=c99 -Wall -Wno-deprecated-declarations -Wno-unused-function -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -no-pie -I.. -I/usr/X11R6/include -I/usr/include/freetype2 -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700L -DVERSION=\"6.8\" -DXINERAMA -o harness harness.c ../drw.c ../util.c -L/usr/X11R6/lib -lX11 -lXinerama -lfontconfig -lXft
+../util.c: In function ‘die’:
+../util.c:19:9: warning: null format string [-Wformat-overflow=]
+   19 |         vfprintf(stderr, fmt, ap);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~
+Xvfb :97 +xinerama -screen 0 1280x800x24 -screen 1 1024x768x24 \
+	>/dev/null 2>&1 & xvfb=$!; sleep 1; \
+DISPLAY=:97 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
+	LSAN_OPTIONS=suppressions=lsan.supp:print_suppressions=0 \
+	./harness 20; status=$?; \
+kill $xvfb; exit $status
+monitors: 1280x800+0 1024x768+0
+harness.c:502:9: runtime error: index 4 out of bounds for type 'Client *[4]'
+    #0 0x000000438ab5 in test_switchall_swap /home/caleb/system/dwm/test/harness.c:502
+    #1 0x000000438ab5 in main /home/caleb/system/dwm/test/harness.c:886
+    #2 0x7fa38e82797d  (/usr/lib/libc.so.6+0x2797d) (BuildId: 67fe0c99b0721d1a763a26d612b4195fda575226)
+    #3 0x7fa38e827abb in __libc_start_main (/usr/lib/libc.so.6+0x27abb) (BuildId: 67fe0c99b0721d1a763a26d612b4195fda575226)
+    #4 0x000000404a64 in _start (/home/caleb/system/dwm/test/harness+0x404a64) (BuildId: bf72bb47d3aa11db5711879b2faecb4c30f9cebd)
+
+make: *** [Makefile:16: test] Error 1
+make: Leaving directory '/home/caleb/system/dwm/test'
+exit: 2
