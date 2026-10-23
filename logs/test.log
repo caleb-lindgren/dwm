@@ -11,13 +11,14 @@ DISPLAY=:97 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
 	./harness 20; status=$?; \
 kill $xvfb; exit $status
 monitors: 1280x800+0 1024x768+0
-harness.c:502:9: runtime error: index 4 out of bounds for type 'Client *[4]'
-    #0 0x000000438ab5 in test_switchall_swap /home/caleb/system/dwm/test/harness.c:502
-    #1 0x000000438ab5 in main /home/caleb/system/dwm/test/harness.c:886
-    #2 0x7fa38e82797d  (/usr/lib/libc.so.6+0x2797d) (BuildId: 67fe0c99b0721d1a763a26d612b4195fda575226)
-    #3 0x7fa38e827abb in __libc_start_main (/usr/lib/libc.so.6+0x27abb) (BuildId: 67fe0c99b0721d1a763a26d612b4195fda575226)
-    #4 0x000000404a64 in _start (/home/caleb/system/dwm/test/harness+0x404a64) (BuildId: bf72bb47d3aa11db5711879b2faecb4c30f9cebd)
-
-make: *** [Makefile:16: test] Error 1
+INFO property reads for one arrange() with 10 clients: 0
+INFO property reads for one drawbar() with 10 clients: 0
+INFO X requests for showall() of 10 hidden clients: 316
+INFO X requests for switchall() of 10 clients: 198
+dwm: execvp 'st' failed: No such file or directory
+dwm: execvp 'st' failed: No such file or directory
+0 failure(s)
+==18741==WARNING: ptrace appears to be blocked (is seccomp enabled?). LeakSanitizer may hang.
+==18741==Child exited with signal 2.
 make: Leaving directory '/home/caleb/system/dwm/test'
-exit: 2
+exit: 0
