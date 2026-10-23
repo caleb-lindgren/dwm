@@ -102,35 +102,48 @@ void tagtoleft(const Arg *arg) {
     }
 }
 
-/* same as sendmon but don't change tags, and leave focusing and
- * re-tiling to the caller */
-void sendmonwithtags(Client *c, Monitor *m)
+/* give the clients now listed on m to m, keeping each floating window
+ * at the same offset from the corner of its screen */
+static void rehome(Monitor *m, Monitor *from)
 {
-	if (c->mon == m)
-		return;
-	unfocus(c, 1);
-	detach(c);
-	detachstack(c);
-	c->mon = m;
-	/* no change to tags */
-	attach(c);
-	attachstack(c);
+	Client *c;
+	int dx = m->mx - from->mx, dy = m->my - from->my;
+
+	for (c = m->clients; c; c = c->next) {
+		c->mon = m;
+		c->x += dx;
+		c->y += dy;
+		c->oldx += dx;
+		c->oldy += dy;
+		if (c->isfullscreen)
+			resizeclient(c, m->mx, m->my, m->mw, m->mh);
+	}
 }
 
-/* move all clients from one monitor to another, preserving tags */
+/* swap the contents of the selected monitor and the one in direction
+ * arg->i: their clients, the tags each views and the per-tag layouts,
+ * so each screen shows what the other did */
 void switchall(const Arg *arg) {
-	Monitor *m = dirtomon(arg->i);
+	Monitor *a = selmon, *b = dirtomon(arg->i);
 	Client *c;
+	Pertag *pt;
+	unsigned int u;
 
-	if (m == selmon)
+	if (a == b)
 		return;
-	movepertag(selmon, m);
-	/* sendmonwithtags() attaches at the head of the target's list, so
-	 * send the last client first to keep the clients in order */
-	while (selmon->clients) {
-		for (c = selmon->clients; c->next; c = c->next);
-		sendmonwithtags(c, m);
-	}
+	unfocus(a->sel, 1);
+	c = a->clients; a->clients = b->clients; b->clients = c;
+	c = a->stack; a->stack = b->stack; b->stack = c;
+	c = a->sel; a->sel = b->sel; b->sel = c;
+	c = a->hidsel; a->hidsel = b->hidsel; b->hidsel = c;
+	u = a->seltags; a->seltags = b->seltags; b->seltags = u;
+	u = a->tagset[0]; a->tagset[0] = b->tagset[0]; b->tagset[0] = u;
+	u = a->tagset[1]; a->tagset[1] = b->tagset[1]; b->tagset[1] = u;
+	pt = a->pertag; a->pertag = b->pertag; b->pertag = pt;
+	rehome(a, b);
+	rehome(b, a);
+	applypertag(a);
+	applypertag(b);
 	focus(NULL);
 	arrange(NULL);
 }

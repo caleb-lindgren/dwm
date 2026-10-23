@@ -442,40 +442,6 @@ test_settabwidths(void)
 	}
 }
 
-static void
-test_switchall_order(void)
-{
-	Monitor *src = selmon, *dst = dirtomon(+1);
-	Client *order[6], *c;
-	Arg arg = {.i = +1};
-	int i, n;
-
-	viewtag(1);
-	focus(NULL);
-	/* one client already on the target, which should end up below */
-	selmon = dst;
-	mkwin("already there");
-	selmon = src;
-	focus(NULL);
-	for (i = 0; i < 5; i++)
-		mkwin("s");
-	for (n = 0, c = src->clients; c; c = c->next)
-		order[n++] = c;
-	order[n] = dst->clients;
-	switchall(&arg);
-	pump();
-	CHECK(!src->clients, "clients left on the source monitor");
-	for (i = 0, c = dst->clients; c && i <= n; c = c->next, i++)
-		CHECK(c == order[i], "switchall changed the order at "
-			"position %d", i);
-	CHECK(i == n + 1 && !c, "target has %d clients, want %d", i, n + 1);
-	selmon = dst;
-	destroyall();
-	selmon = src;
-	focus(NULL);
-	pump();
-}
-
 /* put m's per-tag settings back to the config defaults */
 static void
 resetpertag(Monitor *m)
@@ -490,7 +456,7 @@ resetpertag(Monitor *m)
 		m->pertag->ltidxs[i][1] = &layouts[1 % LENGTH(layouts)];
 		m->pertag->showbars[i] = showbar;
 	}
-	movepertag(m, m);
+	applypertag(m);
 	arrange(m);
 }
 
@@ -501,47 +467,70 @@ slotlayout(Monitor *m, unsigned int slot)
 }
 
 static void
-test_switchall_pertag(void)
+test_switchall_swap(void)
 {
 	Monitor *src = selmon, *dst = dirtomon(+1);
 	Arg mono = {.v = &layouts[2]}, flt = {.v = &layouts[1]};
 	Arg inc = {.i = +1}, arg = {.i = +1};
+	Client *sorder[4], *dorder[2], *fl, *c;
+	int i, ns, nd, x, y;
 
-	/* source: tag 1 monocle with an extra master, tag 2 default */
-	viewtag(1 << 1);
-	mkwin("src tag 2");
+	/* source views tag 1, monocle with an extra master, plus a
+	 * floating window */
 	viewtag(1);
-	mkwin("src tag 1");
+	for (i = 0; i < 3; i++)
+		mkwin("src");
 	setlayout(&mono);
 	incnmaster(&inc);
-	/* target: tag 2 floating with a client of its own, viewing tag 1 */
+	fl = wintoclient(mkwin("src float"));
+	CHECK(fl && fl->mon == src, "floating window not on the source");
+	if (!fl)
+		return;
+	fl->isfloating = 1;
+	resize(fl, src->wx + 40, src->wy + 30, 200, 150, 0);
+	x = fl->x - src->mx;
+	y = fl->y - src->my;
+	/* target views tag 2, floating layout */
 	selmon = dst;
 	viewtag(1 << 1);
-	mkwin("dst tag 2");
+	for (i = 0; i < 2; i++)
+		mkwin("dst");
 	setlayout(&flt);
-	viewtag(1);
 	selmon = src;
 	focus(NULL);
+	for (ns = 0, c = src->clients; c; c = c->next)
+		sorder[ns++] = c;
+	for (nd = 0, c = dst->clients; c; c = c->next)
+		dorder[nd++] = c;
 
 	switchall(&arg);
 	pump();
-	CHECK(slotlayout(dst, 1) == &layouts[2],
-		"tag 1 layout did not move with its clients");
-	CHECK(dst->pertag->nmasters[1] == nmaster + 1,
-		"tag 1 nmaster is %d, want %d", dst->pertag->nmasters[1],
-		nmaster + 1);
+	for (i = 0, c = dst->clients; c && i < ns; c = c->next, i++)
+		CHECK(c == sorder[i] && c->mon == dst,
+			"source client %d not in place on the target", i);
+	CHECK(i == ns && !c, "target has the wrong number of clients");
+	for (i = 0, c = src->clients; c && i < nd; c = c->next, i++)
+		CHECK(c == dorder[i] && c->mon == src,
+			"target client %d not in place on the source", i);
+	CHECK(i == nd && !c, "source has the wrong number of clients");
+	CHECK(dst->tagset[dst->seltags] == 1
+		&& src->tagset[src->seltags] == 1 << 1,
+		"viewed tags not swapped: target %x, source %x",
+		dst->tagset[dst->seltags], src->tagset[src->seltags]);
 	CHECK(dst->lt[dst->sellt] == &layouts[2]
 		&& dst->nmaster == nmaster + 1,
-		"target's current view did not take the moved settings");
-	CHECK(slotlayout(dst, 2) == &layouts[1],
-		"tag 2 layout replaced although the target had clients on it");
-	CHECK(slotlayout(dst, 3) == &layouts[0],
-		"unoccupied tag 3 layout changed");
+		"target did not take the source's layout");
+	CHECK(src->lt[src->sellt] == &layouts[1],
+		"source did not take the target's layout");
+	CHECK(fl->x - dst->mx == x && fl->y - dst->my == y,
+		"floating window at %d,%d from the target's corner, "
+		"want %d,%d", fl->x - dst->mx, fl->y - dst->my, x, y);
 
-	selmon = dst;
 	destroyall();
 	resetpertag(dst);
 	resetpertag(src);
+	selmon = dst;
+	viewtag(1);
 	selmon = src;
 	viewtag(1);
 	focus(NULL);
@@ -894,8 +883,7 @@ main(int argc, char *argv[])
 	test_title_redraw();
 	test_title_click();
 	test_pushring();
-	test_switchall_order();
-	test_switchall_pertag();
+	test_switchall_swap();
 	test_removed_monitor_pertag();
 	test_moved_monitor_floats();
 	test_efficiency();

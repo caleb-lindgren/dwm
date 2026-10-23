@@ -151,6 +151,7 @@ typedef struct {
 } Rule;
 
 /* function declarations */
+static void applypertag(Monitor *m);
 static void applyrules(Client *c);
 static int applysizehints(Client *c, int *x, int *y, int *w, int *h, int interact);
 static void arrange(Monitor *m);
@@ -313,6 +314,25 @@ struct Pertag {
 struct NumTags { char limitexceeded[LENGTH(tags) > 31 ? -1 : 1]; };
 
 /* function implementations */
+void
+applypertag(Monitor *m)
+{
+	/* take on the per-tag settings of m's current view; the caller
+	 * re-arranges m */
+	Pertag *p = m->pertag;
+
+	m->nmaster = p->nmasters[p->curtag];
+	m->mfact = p->mfacts[p->curtag];
+	m->sellt = p->sellts[p->curtag];
+	m->lt[0] = p->ltidxs[p->curtag][0];
+	m->lt[1] = p->ltidxs[p->curtag][1];
+	if (m->showbar != p->showbars[p->curtag]) {
+		m->showbar = p->showbars[p->curtag];
+		updatebarpos(m);
+		XMoveResizeWindow(dpy, m->barwin, m->wx, m->by, m->ww, bh);
+	}
+}
+
 void
 applyrules(Client *c)
 {
@@ -1424,18 +1444,7 @@ movepertag(Monitor *src, Monitor *m)
 		d->ltidxs[i][1] = s->ltidxs[i][1];
 		d->showbars[i] = s->showbars[i];
 	}
-
-	/* apply the settings of m's current view */
-	m->nmaster = d->nmasters[d->curtag];
-	m->mfact = d->mfacts[d->curtag];
-	m->sellt = d->sellts[d->curtag];
-	m->lt[0] = d->ltidxs[d->curtag][0];
-	m->lt[1] = d->ltidxs[d->curtag][1];
-	if (m->showbar != d->showbars[d->curtag]) {
-		m->showbar = d->showbars[d->curtag];
-		updatebarpos(m);
-		XMoveResizeWindow(dpy, m->barwin, m->wx, m->by, m->ww, bh);
-	}
+	applypertag(m);
 }
 
 void
