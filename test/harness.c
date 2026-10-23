@@ -466,23 +466,40 @@ slotlayout(Monitor *m, unsigned int slot)
 	return m->pertag->ltidxs[slot][m->pertag->sellts[slot]];
 }
 
+/* a new window managed on m: dwm puts it on selmon, which an event
+ * can move off m while the window maps, so send it there if needed */
+static Client *
+mkwinon(Monitor *m, const char *name)
+{
+	Client *c;
+
+	selmon = m;
+	c = wintoclient(mkwin(name));
+	if (c && c->mon != m)
+		sendmon(c, m);
+	pump();
+	selmon = m;
+	return c;
+}
+
 static void
 test_switchall_swap(void)
 {
 	Monitor *src = selmon, *dst = dirtomon(+1);
 	Arg mono = {.v = &layouts[2]}, flt = {.v = &layouts[1]};
 	Arg inc = {.i = +1}, arg = {.i = +1};
-	Client *sorder[4], *dorder[2], *fl, *c;
+	Client *sorder[8], *dorder[8], *fl, *c;
 	int i, ns, nd, x, y;
 
 	/* source views tag 1, monocle with an extra master, plus a
 	 * floating window */
+	selmon = src;
 	viewtag(1);
 	for (i = 0; i < 3; i++)
-		mkwin("src");
+		mkwinon(src, "src");
 	setlayout(&mono);
 	incnmaster(&inc);
-	fl = wintoclient(mkwin("src float"));
+	fl = mkwinon(src, "src float");
 	CHECK(fl && fl->mon == src, "floating window not on the source");
 	if (!fl)
 		return;
@@ -494,14 +511,16 @@ test_switchall_swap(void)
 	selmon = dst;
 	viewtag(1 << 1);
 	for (i = 0; i < 2; i++)
-		mkwin("dst");
+		mkwinon(dst, "dst");
 	setlayout(&flt);
 	selmon = src;
 	focus(NULL);
-	for (ns = 0, c = src->clients; c; c = c->next)
+	for (ns = 0, c = src->clients; c && ns < 8; c = c->next)
 		sorder[ns++] = c;
-	for (nd = 0, c = dst->clients; c; c = c->next)
+	for (nd = 0, c = dst->clients; c && nd < 8; c = c->next)
 		dorder[nd++] = c;
+	CHECK(ns == 4 && nd == 2, "set up %d source and %d target clients, "
+		"want 4 and 2", ns, nd);
 
 	switchall(&arg);
 	pump();
@@ -558,7 +577,7 @@ test_removed_monitor_pertag(void)
 
 	selmon = gone;
 	viewtag(1 << 2);
-	mkwin("on the removed monitor");
+	mkwinon(gone, "on the removed monitor");
 	CHECK(gone->clients, "window not managed on the extra monitor");
 	setlayout(&mono);
 	selmon = mons;
